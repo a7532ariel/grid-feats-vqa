@@ -162,3 +162,43 @@ class AttributeDatasetMapper(DatasetMapper):
             sem_seg_gt = torch.as_tensor(sem_seg_gt.astype("long"))
             dataset_dict["sem_seg"] = sem_seg_gt
         return dataset_dict
+
+
+class TestDatasetMapper(DatasetMapper):
+    """
+    Extend DatasetMapper for feature extraction.
+    """
+
+    def __init__(self, cfg, is_train=False):
+        super().__init__(cfg, is_train)
+
+    def __call__(self, dataset_dict):
+        dataset_dict = copy.deepcopy(dataset_dict)
+        try:
+            image = utils.read_image(dataset_dict["file_name"], format=self.img_format)
+            utils.check_image_size(dataset_dict, image)
+        except OSError:
+            return
+
+        if "annotations" not in dataset_dict:
+            image, transforms = T.apply_transform_gens(
+                ([self.crop_gen] if self.crop_gen else []) + self.tfm_gens, image
+            )
+        else:
+            if self.crop_gen:
+                crop_tfm = utils.gen_crop_transform_with_instance(
+                    self.crop_gen.get_crop_size(image.shape[:2]),
+                    image.shape[:2],
+                    np.random.choice(dataset_dict["annotations"]),
+                )
+                image = crop_tfm.apply_image(image)
+            image, transforms = T.apply_transform_gens(self.tfm_gens, image)
+            if self.crop_gen:
+                transforms = crop_tfm + transforms
+
+        image_shape = image.shape[:2]
+        dataset_dict["image"] = torch.as_tensor(
+            np.ascontiguousarray(image.transpose(2, 0, 1))
+        )
+
+        return dataset_dict

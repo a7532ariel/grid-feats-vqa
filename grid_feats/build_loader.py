@@ -1,4 +1,6 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+import os
+import glob
 import logging
 import operator
 import torch.utils.data
@@ -8,7 +10,7 @@ from detectron2.data import samplers
 from detectron2.data.build import get_detection_dataset_dicts, worker_init_reset_seed, trivial_batch_collator
 from detectron2.data.common import AspectRatioGroupedDataset, DatasetFromList, MapDataset
 
-from .dataset_mapper import AttributeDatasetMapper
+from .dataset_mapper import AttributeDatasetMapper, TestDatasetMapper
 
 
 def build_detection_train_loader_with_attributes(cfg, mapper=None):
@@ -91,6 +93,31 @@ def build_detection_test_loader_with_attributes(cfg, dataset_name, mapper=None):
     dataset = DatasetFromList(dataset_dicts)
     if mapper is None:
         mapper = AttributeDatasetMapper(cfg, False)
+    dataset = MapDataset(dataset, mapper)
+
+    sampler = samplers.InferenceSampler(len(dataset))
+    batch_sampler = torch.utils.data.sampler.BatchSampler(sampler, 1, drop_last=False)
+
+    data_loader = torch.utils.data.DataLoader(
+        dataset,
+        num_workers=cfg.DATALOADER.NUM_WORKERS,
+        batch_sampler=batch_sampler,
+        collate_fn=trivial_batch_collator,
+    )
+    return data_loader
+
+
+def build_detection_test_loader_for_images(cfg, dataset_path, mapper=None):
+    image_list = glob.glob(os.path.join(dataset_path, "*.jpg"))
+    image_list += glob.glob(os.path.join(dataset_path, "*.png"))
+    dataset_dicts = [
+        {"file_name": x, "image_id": os.path.splitext(os.path.basename(x))[0]}
+        for x in image_list
+    ]
+
+    dataset = DatasetFromList(dataset_dicts)
+    if mapper is None:
+        mapper = TestDatasetMapper(cfg, False)
     dataset = MapDataset(dataset, mapper)
 
     sampler = samplers.InferenceSampler(len(dataset))
