@@ -10,6 +10,7 @@ def add_attribute_config(cfg):
     """
     # Whether to have attribute prediction
     cfg.MODEL.ATTRIBUTE_ON = False
+    cfg.MODEL.ATTRIBUTE_THRE = 0.5
     # Maximum number of attributes per foreground instance
     cfg.INPUT.MAX_ATTR_PER_INS = 16
     # ------------------------------------------------------------------------ #

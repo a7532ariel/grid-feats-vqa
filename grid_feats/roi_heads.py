@@ -104,6 +104,8 @@ class AttributeRes5ROIHeads(AttributeROIHeads, Res5ROIHeads):
         sampling_ratio    = cfg.MODEL.ROI_BOX_HEAD.POOLER_SAMPLING_RATIO
         self.mask_on      = cfg.MODEL.MASK_ON
         self.attribute_on = cfg.MODEL.ATTRIBUTE_ON
+        if self.attribute_on:
+            self.attribute_thre = cfg.MODEL.ATTRIBUTE_THRE
         # fmt: on
         assert not cfg.MODEL.KEYPOINT_ON
 
@@ -157,9 +159,30 @@ class AttributeRes5ROIHeads(AttributeROIHeads, Res5ROIHeads):
                 losses.update(self.forward_attribute_loss(proposals, feature_pooled))
             return [], losses
         else:
-            pred_instances, _ = self.box_predictor.inference(predictions, proposals)
+            pred_instances, chose_indices = self.box_predictor.inference(predictions, proposals)
             pred_instances = self.forward_with_given_boxes(features, pred_instances)
+            pred_instances[0].pred_attributes = [[] for _ in range(chose_indices[0].size(0))]
+            pred_instances[0].attr_scores = [[] for _ in range(chose_indices[0].size(0))]
+
+            if self.attribute_on and chose_indices[0].size(0) != 0:
+                attr_labels, attr_scores = self.predict_attrs(
+                    feature_pooled[chose_indices], 
+                    predictions[0][chose_indices],
+                    self.attribute_thre
+                )
+                pred_instances[0].pred_attributes = attr_labels
+                pred_instances[0].attr_scores = attr_scores
+
             return pred_instances, {}
+
+    def predict_attrs(self, features, obj_probs, score_thresh=0.5):
+        obj_labels = torch.argmax(obj_probs, dim=1)
+
+        attribute_scores = self.attribute_predictor(features, obj_labels)
+        attr_labels = torch.argmax(attribute_scores, dim=1) 
+        attr_scores = attribute_scores.gather(1, attr_labels.unsqueeze(1))
+
+        return attr_labels, attr_scores
 
     def get_conv5_features(self, features):
         features = [features[f] for f in self.in_features]

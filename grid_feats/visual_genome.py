@@ -4,6 +4,7 @@ import contextlib
 import io
 import logging
 import os
+import json
 from fvcore.common.file_io import PathManager
 from fvcore.common.timer import Timer
 
@@ -45,6 +46,19 @@ Category ids in annotations are not in [1, #categories]! We'll apply a mapping f
                 )
         id_map = {v: i for i, v in enumerate(cat_ids)}
         meta.thing_dataset_id_to_contiguous_id = id_map
+
+        ## store attr in metadata
+        with open(json_file, 'rb') as f:
+            origin_json_file = json.load(f)
+        if 'attCategories' in origin_json_file:
+            attrs = origin_json_file['attCategories']
+            thing_attrs = [c["name"] for c in sorted(attrs, key=lambda x: x["id"])]
+            ## hard code 400
+            assert len(thing_attrs) == 400, "attr len is not equal to 400 !!!"
+            meta.thing_attrs = thing_attrs
+            
+            attr_id_map = {i: i for i, _ in enumerate(thing_attrs)}
+            meta.thing_attribute_id_to_contiguous_id = attr_id_map
 
     img_ids = sorted(coco_api.imgs.keys())
     imgs = coco_api.loadImgs(img_ids)
